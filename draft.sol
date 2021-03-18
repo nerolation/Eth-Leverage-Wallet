@@ -37,6 +37,10 @@ interface TokenLike {
         view 
         returns (uint256);
     function withdraw(uint wad) external;
+    function allowance(address owner,address spender)
+        external 
+        view 
+        returns (uint256);
 }
 
 
@@ -53,7 +57,7 @@ interface UniswapV2Router02Like {
         returns (uint[] memory amounts);
 }
 
-interface UniswapV2Factory{
+interface UniswapV2FactoryLike{
     function getPair(address tokenA, 
                      address tokenB
                      ) 
@@ -62,7 +66,7 @@ interface UniswapV2Factory{
         returns (address pair);
 }
 
-interface UniswapV2Pair {   
+interface UniswapV2PairLike {   
     function getReserves() 
         external 
         view 
@@ -76,34 +80,35 @@ interface UniswapV2Pair {
 
 
 contract HelperContract {
-     address DssProxyActions = 0xf2A4966bE1e633Fd3A4b7011Ab543b0AA5050047;
-     address MCD_JUG = 0x4bc636a867E8B9275aB022C1Ef44d6B24bc65b8d;
-     address ETH_JOIN = 0xa885b27E8754f8238DBedaBd2eae180490C341d7;
-     address DAI_JOIN = 0xA0b569e9E0816A20Ab548D692340cC28aC7Be986;
+     address payable owner;
+     address DssProxyActions = 0x82ecD135Dce65Fbc6DbdD0e4237E0AF93FFD5038;
+     address CPD_MANAGER = 0x5ef30b9986345249bc32d8928B7ee64DE9435E39;
+     address MCD_VAT = 0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B;
+     address MCD_JUG = 0x19c0976f590D67707E62397C87829d896Dc0f1F1;
+     address ETH_JOIN = 0x2F0b23f53734252Bda2277357e97e1517d6B042A;
+     address DAI_JOIN = 0x9759A6Ac90977b93B58547b4A71c78317f391A28;
      bytes32 ilk = 0x4554482d41000000000000000000000000000000000000000000000000000000;
-     address DAI_TOKEN = 0x31F42841c2db5173425b5223809CF3A38FEde360;
+     address DAI_TOKEN = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
      address UNI_Router = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
      address UNI_Factory = 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
+     address Wrapped_ETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+     address MCD_PROXY_REGISTRY = 0x4678f0a6958e4D2Bc4F1BAF7Bc52E8F3564f3fE4;
      
-     DssCdpManagerLike dcml = DssCdpManagerLike(0x033b7629CeC52a41712C362868f6cd70aEFc0545);
-     ProxyRegistryLike prl = ProxyRegistryLike(0x1b8357eB14Dd29e4D29AC163342Ee838DeEBCC7f);
-     UniswapV2Factory uv2 = UniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
-     UniswapV2Router02Like url = UniswapV2Router02Like(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
-     TokenLike dai = TokenLike(DAI_TOKEN);
-     TokenLike weth = TokenLike(url.WETH());
-     
-     address public proxy;
-     uint256 public cdpi;
-     address payable owner;
+     DssCdpManagerLike      dcml =  DssCdpManagerLike(CPD_MANAGER);
+     ProxyRegistryLike      prl  =  ProxyRegistryLike(MCD_PROXY_REGISTRY);
+     UniswapV2Router02Like  url  =  UniswapV2Router02Like(UNI_Router);
+     UniswapV2FactoryLike   uv2  =  UniswapV2FactoryLike(UNI_Factory);
+     TokenLike              dai  =  TokenLike(DAI_TOKEN);
+     TokenLike              weth =  TokenLike(url.WETH());
+     VatLike                vat  =  VatLike(MCD_VAT);
      
      modifier onlyMyself {
-         require(msg.sender == owner, "Your not the owner");
+         require(tx.origin == owner, "Your not the owner");
          _;
      }
      
     // Return minimum draw amount of DAI
     function getMinDraw() public view onlyMyself returns (uint) {
-        VatLike vat = VatLike(0xFfCFcAA53b61cF5F332b4FBe14033c1Ff5A391eb);
         (,uint rate,,,uint dust) = vat.ilks(ilk);
         return dust/rate;
     }
@@ -117,30 +122,41 @@ contract HelperContract {
      // get token reserves from the pool to determine the current exchange rate
      function getTokenReserves_uni() public view onlyMyself returns (uint, uint) {
         address pair = uv2.getPair(DAI_TOKEN,address(weth));
-        (uint reserved0, uint reserved1,) = UniswapV2Pair(pair).getReserves();
+        (uint reserved0, uint reserved1,) = UniswapV2PairLike(pair).getReserves();
         return (reserved0, reserved1);
         
     }
     
         
-     function myContractsDaiBalance() public view onlyMyself returns (uint){
-         return dai.balanceOf(address(this));
-     }
+    function myContractsDaiBalance() public view onlyMyself returns (uint){
+        return dai.balanceOf(address(this));
+    }
      
-     function myContractsWETHBalance() public view onlyMyself returns (uint){
-         return weth.balanceOf(address(this));
-     }
+    function myContractsWETHBalance() public view onlyMyself returns (uint){
+        return weth.balanceOf(address(this));
+    }
+    
+    function UniswapIsAllowedToSwapDai() public view onlyMyself returns (uint) {
+        return dai.allowance(address(this),UNI_Router);
+    }
      
      
 }
 
 contract myCallerContract is HelperContract{
+    
+    address public proxy;
+    uint256 public cdpi;
+     
+    constructor() payable {
+        owner = payable(msg.sender);
+    }
 
      // build DS Proxy for the CallerContract
      function buildProxy() public {
          prl.build();
          //Safe proxy address to state variable
-         address proxy = prl.proxies(address(this));
+         proxy = prl.proxies(address(this));
      }
 
      // Open CDP, lock some Eth and draw Dai
@@ -171,32 +187,32 @@ contract myCallerContract is HelperContract{
     }
     
     // Execute Swap from Dai to Weth on Uniswap
-    function  swapThatShit(uint value, uint exchangeRate) public onlyMyself returns (uint[] memory amounts) {
+    function  swapThatShit(uint value_in, uint value_out) public onlyMyself returns (uint[] memory amounts) {
         address[] memory path = new address[](2);
         path[0] = address(DAI_TOKEN);
         path[1] = url.WETH();
         
         // IN and OUT amounts
-        uint amount_in = value;
-        uint amount_out = value/exchangeRate;
-        uint[] memory amounts = url.swapExactTokensForETH(amount_in,
-                                                          amount_out, 
-                                                          path, 
-                                                          address(this), 
-                                                          block.timestamp + 60
-                                                          );
-        return amounts;
+        uint amount_in = value_in;
+        uint amount_out = value_out;
+        amounts = url.swapExactTokensForETH(amount_in,
+                                            amount_out, 
+                                            path, 
+                                            address(this), 
+                                            block.timestamp + 20
+                                            );
+        return amounts;  
     }
     
     // Lock some Eth and draw Dai
-    function LockETHAndDraw() public payable onlyMyself {
+    function LockETHAndDraw(uint value) public payable onlyMyself {
         bytes memory payload = abi.encodeWithSignature("lockETHAndDraw(address,address,address,address,uint256,uint256)", 
             address(dcml), 
             MCD_JUG, 
             ETH_JOIN,
             DAI_JOIN, 
             cdpi,
-            10000000000000000000);
+            value);
         (bool success, ) = proxy.call{
                 value:msg.value
             }(abi.encodeWithSignature(
@@ -215,6 +231,7 @@ contract myCallerContract is HelperContract{
         owner.transfer(address(this).balance);
     }
     
+    fallback() external payable{}
     receive() external payable{}
-     
+    
 }
