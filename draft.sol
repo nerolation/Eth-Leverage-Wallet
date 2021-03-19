@@ -2,13 +2,18 @@
 
 pragma solidity 0.8.0;
 
+
+// --- INTERFACES ---
+// Interfaces for Uniswap and MakerDao
+//
+
+// CDP Interface
 contract DssCdpManagerLike {
     mapping (address => uint) public first;     // Owner => First CDPId
     mapping (uint => address) public urns;      // CDPId => UrnHandler
-    
 }
 
-
+// Vat Interface
 contract VatLike {
     struct Ilk {
             uint256 Art;   // Total Normalised Debt     [wad]
@@ -24,17 +29,20 @@ contract VatLike {
     mapping (bytes32 => Ilk) public ilks;
     mapping (bytes32 => mapping (address => Urn)) public urns;
 }
+
+// Proxy Registry Interface
 interface ProxyRegistryLike {
     function proxies(address) 
         external 
         view 
         returns (address);
-        
+    
+    // build proxy contract
     function build() 
         external;
 }
 
-
+// Very basic Erc-20 like token interface
 interface TokenLike {
     function approve(address usr, uint wad) 
         external 
@@ -50,8 +58,7 @@ interface TokenLike {
         returns (uint256);
 }
 
-
-
+// Uniswap Router Interface
 interface UniswapV2Router02Like {
     function WETH() external returns (address);
     function swapExactTokensForETH(uint amountIn, 
@@ -64,6 +71,7 @@ interface UniswapV2Router02Like {
         returns (uint[] memory amounts);
 }
 
+// Uniswap Factory Interface
 interface UniswapV2FactoryLike{
     function getPair(address tokenA, 
                      address tokenB
@@ -73,6 +81,7 @@ interface UniswapV2FactoryLike{
         returns (address pair);
 }
 
+// Uniswap Pair Interface
 interface UniswapV2PairLike {   
     function getReserves() 
         external 
@@ -84,8 +93,9 @@ interface UniswapV2PairLike {
 }
 
 
-
-
+// --- HELPER CONTRACT ---
+// Contract stores the state variables and very basic helper functions
+// 
 contract HelperContract {
      address payable owner;
      address DssProxyActions = 0x82ecD135Dce65Fbc6DbdD0e4237E0AF93FFD5038;
@@ -112,98 +122,138 @@ contract HelperContract {
      VatLike                vat  =  VatLike(MCD_VAT);
      
      
+     //
+     // Modifiers
+     //
+     
+     // Ensure only the deployer of the contract can interact with ´onlyMyself´ flagged functions
      modifier onlyMyself {
          require(tx.origin == owner, "Your not the owner");
          _;
      }
      
+     //
+     // Helper Function
+     //
+     
     // Return minimum and maximum draw amount of DAI
-    function getMinAndMaxDraw(uint input) public view onlyMyself returns (uint[2] memory) {
-        (,uint rate,uint spot,,uint dust) = vat.ilks(ilk);
-        return [dust/rate, input*spot/rate];
+    function getMinAndMaxDraw(uint input) 
+        public
+        view
+        onlyMyself
+        returns (uint[2] memory) {
+            (,uint rate,uint spot,,uint dust) = vat.ilks(ilk);
+            return [dust/rate, input*spot/rate];
     }
     
-    function getExchangeRate() public view onlyMyself returns(uint) {
-         (uint a, uint b) = getTokenReserves_uni() ;
-         return a/b;
+    // get Uniswap's exchange rate of ETH/WETH
+    function getExchangeRate() 
+        public 
+        view 
+        onlyMyself 
+        returns(uint) {
+            (uint a, uint b) = getTokenReserves_uni() ;
+            return a/b;
      }
      
      // get token reserves from the pool to determine the current exchange rate
-     function getTokenReserves_uni() public view onlyMyself returns (uint, uint) {
-        address pair = uv2.getPair(DAI_TOKEN,address(weth));
-        (uint reserved0, uint reserved1,) = UniswapV2PairLike(pair).getReserves();
-        return (reserved0, reserved1);
+     function getTokenReserves_uni() 
+        public 
+        view
+        onlyMyself 
+        returns (uint, uint) {
+            address pair = uv2.getPair(DAI_TOKEN,address(weth));
+            (uint reserved0, uint reserved1,) = UniswapV2PairLike(pair).getReserves();
+            return (reserved0, reserved1);
         
     }
-        
-    function daiBalance() public view onlyMyself returns (uint){
-        return dai.balanceOf(address(this));
+     
+    // This contracts ether balance
+    function daiBalance() 
+        public 
+        view 
+        onlyMyself 
+        returns (uint){
+            return dai.balanceOf(address(this));
     }
      
-    function wethBalance() public view onlyMyself returns (uint){
-        return weth.balanceOf(address(this));
+    // This contracts weth balance
+    function wethBalance() 
+        public 
+        view
+        onlyMyself 
+        returns (uint){
+            return weth.balanceOf(address(this));
     }
     
-    function daiAllowanceApproved() public view onlyMyself returns (uint) {
-        return dai.allowance(address(this),UNI_Router);
+    // Check if Uniswap's Router is approved to transfer Dai
+    function daiAllowanceApproved() 
+        public 
+        view 
+        onlyMyself 
+        returns (uint) {
+            return dai.allowance(address(this),UNI_Router);
     }
     
-    function vaultBalance() public view onlyMyself returns (uint[2] memory){
-        (uint coll, uint dept) = vat.urns(ilk, MCD_UrnHandler);
-        return [coll, dept];
-    }
-     
-     
+    // This contracts' vault stats
+    function vaultBalance() 
+        public 
+        view 
+        onlyMyself 
+        returns (uint[2] memory){
+            (uint coll, uint dept) = vat.urns(ilk, MCD_UrnHandler);
+            return [coll, dept];
+    }   
 }
 
+// --- CALLER CONTRACT ---
+// Contract stores the functions that interact with the protocols of MakerDao and Uniswap
+// 
 contract CallerContract is HelperContract{
     
-     
-
-     // build DS Proxy for the CallerContract
+     // Build DS Proxy for the CallerContract
      function buildProxy() public {
          prl.build();
-         //Safe proxy address to state variable
-         proxy = prl.proxies(address(this));
+         proxy = prl.proxies(address(this)); // Safe proxy address to state variable
      }
 
      // Open CDP, lock some Eth and draw Dai
      function openLockETHAndDraw(uint drawAmount) public payable onlyMyself {   
          bytes memory payload = abi.encodeWithSignature("openLockETHAndDraw(address,address,address,address,bytes32,uint256)", 
-                            address(dcml), 
-                            MCD_JUG, 
-                            ETH_JOIN, 
-                            DAI_JOIN, 
-                            ilk, 
-                            drawAmount
-                           );
-        (bool success, ) = proxy.call{
+                                    address(dcml), 
+                                    MCD_JUG, 
+                                    ETH_JOIN, 
+                                    DAI_JOIN, 
+                                    ilk, 
+                                    drawAmount
+                                    );
+       (bool success, ) = proxy.call{
                 value:msg.value
             }(abi.encodeWithSignature(
                 "execute(address,bytes)",
-                    DssProxyActions, 
-                    payload
-                    )                          
+                    DssProxyActions, payload)
              );
-            cdpi = dcml.first(proxy);
-            MCD_UrnHandler = dcml.urns(cdpi);
+                    
+        cdpi = dcml.first(proxy);
+        MCD_UrnHandler = dcml.urns(cdpi);
     }
     
     // Lock some Eth and draw Dai
     function lockETHAndDraw(uint drawAmount) public payable onlyMyself {
         bytes memory payload = abi.encodeWithSignature("lockETHAndDraw(address,address,address,address,uint256,uint256)", 
-            address(dcml), 
-            MCD_JUG, 
-            ETH_JOIN,
-            DAI_JOIN, 
-            cdpi,
-            drawAmount);
+                                   address(dcml), 
+                                   MCD_JUG, 
+                                   ETH_JOIN,
+                                   DAI_JOIN, 
+                                   cdpi,
+                                   drawAmount
+                                   );
         (bool success, ) = proxy.call{
                 value:msg.value
             }(abi.encodeWithSignature(
                 "execute(address,bytes)",
                 DssProxyActions, payload)
-             );
+            );
     }
     
     // Approve Uniswap to take Dai tokens
@@ -236,34 +286,45 @@ contract CallerContract is HelperContract{
     }
     
     // Swap WETH to ETH
-    function wethToEthSwap() public onlyMyself {
-        weth.withdraw(wethBalance());
+    function wethToEthSwap() 
+        public 
+        onlyMyself {
+            weth.withdraw(wethBalance());
     }
     
     // Pay back contract's ether to owner
-    function payBack() public onlyMyself {
-        owner.transfer(address(this).balance);
+    function payBack() 
+        public 
+        onlyMyself {
+            owner.transfer(address(this).balance);
     }
     
     fallback() external payable{}
     receive() external payable{}
 }
 
+
+// --- ETH LEVERAGE CONTRACT ---
+// Main Interface to interact with the CallerContract
+// 
 contract EthLeverager is CallerContract {
     
     constructor() payable {
         owner = payable(msg.sender);
     }
     
-    function action(uint drawAmount, uint offset) payable onlyMyself public {
-        uint exchangeRate = getExchangeRate();
-        uint weth_out = (drawAmount/exchangeRate)-offset;
-        buildProxy();
-        openLockETHAndDraw(drawAmount);
-        require(daiBalance()>0, "Problem with lock and draw");
-        approveUNIRouter(drawAmount);
-        require(daiAllowanceApproved() > 0, "Problem with Approval");
-        swapDAItoWETH(drawAmount, weth_out);
+    function action(uint drawAmount, uint offset) 
+        payable 
+        onlyMyself 
+        public {
+            uint exchangeRate = getExchangeRate();
+            uint weth_out = (drawAmount/exchangeRate)-offset;
+            buildProxy();
+            openLockETHAndDraw(drawAmount);
+            require(daiBalance()>0, "Problem with lock and draw");
+            approveUNIRouter(drawAmount);
+            require(daiAllowanceApproved() > 0, "Problem with Approval");
+            swapDAItoWETH(drawAmount, weth_out);
         
         
     }
