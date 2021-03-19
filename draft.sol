@@ -132,6 +132,18 @@ contract HelperContract {
          _;
      }
      
+     // Ensure only the DS Proxy doesn't already have opened a Vault
+     modifier NoExistingCDP {
+         require(cdpi == 0, "There exists already a CDP");
+         _;
+     }
+     
+     // Ensure only the Contract doesn't already have a DS Proxy
+     modifier NoExistingProxy {
+         require(proxy == address(0), "There exists already a Proxy");
+         _;
+     }
+     
      //
      // Helper Function
      //
@@ -143,7 +155,9 @@ contract HelperContract {
         onlyMyself
         returns (uint[2] memory) {
             (,uint rate,uint spot,,uint dust) = vat.ilks(ilk);
-            return [dust/rate, input*spot/rate];
+            (uint balance, uint dept) = vat.urns(ilk, MCD_UrnHandler);
+            balance += input;
+            return [dust/rate, balance*spot/rate];
     }
     
     // get Uniswap's exchange rate of ETH/WETH
@@ -195,7 +209,7 @@ contract HelperContract {
             return dai.allowance(address(this),UNI_Router);
     }
     
-    // This contracts' vault stats
+    // This contracts' vault balance
     function vaultBalance() 
         public 
         view 
@@ -212,13 +226,13 @@ contract HelperContract {
 contract CallerContract is HelperContract{
     
      // Build DS Proxy for the CallerContract
-     function buildProxy() public {
+     function buildProxy() NoExistingProxy public {
          prl.build();
          proxy = prl.proxies(address(this)); // Safe proxy address to state variable
      }
 
      // Open CDP, lock some Eth and draw Dai
-     function openLockETHAndDraw(uint drawAmount) public payable onlyMyself {   
+     function openLockETHAndDraw(uint drawAmount) public payable onlyMyself NoExistingCDP {   
          bytes memory payload = abi.encodeWithSignature("openLockETHAndDraw(address,address,address,address,bytes32,uint256)", 
                                     address(dcml), 
                                     MCD_JUG, 
@@ -265,7 +279,7 @@ contract CallerContract is HelperContract{
     }
     
     // Execute Swap from Dai to Weth on Uniswap
-    function  swapDAItoWETH(uint value_in, uint value_out) 
+    function  swapDAItoETH(uint value_in, uint value_out) 
         public 
         onlyMyself 
         returns (uint[] memory amounts) {
@@ -307,47 +321,75 @@ contract CallerContract is HelperContract{
 // --- ETH LEVERAGE CONTRACT ---
 // Main Interface to interact with the CallerContract
 // 
-contract EthLeverager is CallerContract {
+contract AlphaStage_EthLeverager is CallerContract {
     
     constructor() payable {
         owner = payable(msg.sender);
     }
     
-    function action(uint drawAmount, uint offset) 
+    // 
+    // Single Round - Action function to execute the magic within one transaction
+    //
+    // Input: ExchangeRate DAI/ETH (1855), price tolerance in wei (1000000000)
+    function action(uint rate, uint offset) 
         payable 
         onlyMyself 
         public {
-            uint exchangeRate = getExchangeRate();
-            uint weth_out = (drawAmount/exchangeRate)-offset;
-            buildProxy();
-            openLockETHAndDraw(drawAmount);
-            require(daiBalance()>0, "Problem with lock and draw");
-            approveUNIRouter(drawAmount);
-            require(daiAllowanceApproved() > 0, "Problem with Approval");
-            swapDAItoWETH(drawAmount, weth_out);
-        
-        
-    }
-    
-    function action(uint leverage, uint rate, uint offset) 
-        payable 
-        onlyMyself 
-        public {
+            // Ensure that the exchange rate didn't change dramatically
             uint exchangeRate = getExchangeRate();
             require(exchangeRate >= rate - offset 
                                  && 
                     exchangeRate <= rate + offset, "Exchange Rate might have changed or offset too small"
                     );
-            uint goal = msg.value*leverage;
+                    
+                    
+            uint input = msg.value;
+            uint drawAmount = getMinAndMaxDraw(input)[1];
+            uint weth_out = drawAmount/(exchangeRate+offset);
+            if (proxy == address(0)) {
+                buildProxy();
+            }
+            if (cdpi == 0){
+                openLockETHAndDraw(drawAmount);
+            } else {
+                lockETHAndDraw(drawAmount);
+            }
+            require(daiBalance()>0, "Problem with lock and draw");
+            approveUNIRouter(drawAmount);
+            require(daiAllowanceApproved() > 0, "Problem with Approval");
+            swapDAItoETH(drawAmount, weth_out);
+    }
     
+    
+    //
+    // Mulitple Rounds - Action function to execute the magic within one transaction
+    //
+    // Input: Leverage factor (150), exchangeRate DAI/ETH (1855), price tolerance in wei (1000000000)
+    function action(uint leverage, uint rate, uint offset) 
+        payable 
+        onlyMyself 
+        public {
+            // Leverage factor cannot be risen above 2.7x
+            require(leverage > 0 && leverage < 270, "Leverage factor must be somewhere between 0 and 270");
             
+            // Ensure that the exchange rate didn't change dramatically
+            uint exchangeRate = getExchangeRate();
+            require(exchangeRate >= rate - offset 
+                                 && 
+                    exchangeRate <= rate + offset, "Exchange Rate might have changed or offset too small"
+                    );
+                    
+            // Desired ether amount at the end
+            uint goal = msg.value*(leverage)/100;
             
             if (proxy == address(0)) {
                 buildProxy();
             }
-            uint drawAmount = msg.value;
-            while (vaultBalance()[0] < goal) {
-                
+            
+            uint input = msg.value;
+            uint drawAmount = getMinAndMaxDraw(input)[1];
+            
+            while (vaultBalance()[0] < goal && drawAmount > getMinAndMaxDraw(input)[0]) {
                 if (cdpi == 0){
                     openLockETHAndDraw(drawAmount);
                 } else {
@@ -358,12 +400,10 @@ contract EthLeverager is CallerContract {
                 approveUNIRouter(drawAmount);
                 require(daiAllowanceApproved() > 0, "Problem with Approval");
                 
-                uint weth_out = msg.value/(exchangeRate-offset);
-                swapDAItoWETH(drawAmount, weth_out);
-            
+                uint weth_out = input/(exchangeRate+offset);
+                swapDAItoETH(drawAmount, weth_out);
+                input = address(this).balance;
+                drawAmount = getMinAndMaxDraw(input)[1];
             }
-            
-        
-        
     }
 }
