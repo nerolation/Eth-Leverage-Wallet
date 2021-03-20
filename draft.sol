@@ -376,13 +376,13 @@ contract AlphaStage_EthLeverager is CallerContract {
     //
     // Mulitple Rounds - Action function to execute the magic within one transaction
     //
-    // Input: Leverage factor (150), exchangeRate DAI/ETH (1855), price tolerance in wei (1000000000)
+    // Input: Leverage factor (ex. 150), exchangeRate DAI/ETH (ex. 1855), price tolerance in wei (ex. 1000000000)
     function action(uint leverage, uint rate, uint offset) 
         payable 
         onlyMyself 
         public {
             // Leverage factor cannot be risen above 2.7x
-            require(leverage > 0 && leverage < 270, "Leverage factor must be somewhere between 0 and 270");
+            require(leverage >= 100 && leverage < 270, "Leverage factor must be somewhere between 100 and 270");
             
             // Ensure that the exchange rate didn't change dramatically
             uint exchangeRate = getExchangeRate();
@@ -406,32 +406,28 @@ contract AlphaStage_EthLeverager is CallerContract {
             uint vault = vaultBalance()[0];
             loopCount = 0;
             while ((vault < goal) && (drawAmount > minDraw)) {
-                require(drawAmount > draw[0], "MR - Min Draw larger than Max Draw");
                 require(drawAmount > 0, "MR - Draw is zero");
                 require(eth_out > 0, "MR - ETH out is zero");
                 if (cdpi == 0){
                     openLockETHAndDraw(input, drawAmount);
-                    require(daiBalance() > 0, "1MR - Problem with lock and draw");
                 } else {
                     lockETHAndDraw(input, drawAmount);
-                    require(daiBalance() > 0, "2MR - Problem with lock and draw");
                 }
-                require(daiBalance() > 0, "3MR - Problem with lock and draw");
+                require(daiBalance() > 0, "MR - Problem with lock and draw");
                 
                 approveUNIRouter(drawAmount);
                 require(daiAllowanceApproved() > 0, "MR - Problem with approval");
                 
                 swapDAItoETH(drawAmount, eth_out);
                 require(address(this).balance > 0, "MR - Problem with the swap");
-                require(address(this).balance < input, "Input Fail");
+                
                 input = address(this).balance;
                 draw = getMinAndMaxDraw(input);
                 minDraw = draw[0];
                 drawAmount = draw[1];
-                require(drawAmount > 0, "2MR - Draw is zero");
                 eth_out = drawAmount/(exchangeRate+offset);
                 vault = vaultBalance()[0];
-                require(vault > 0, "MR - Vault problem");
+                require(vault > 0, "MR - Problem with the vault");
                 loopCount += 1;
             }
     }
