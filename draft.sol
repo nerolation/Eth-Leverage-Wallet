@@ -156,8 +156,8 @@ contract HelperContract {
         returns (uint[2] memory) {
             (,uint rate,uint spot,,uint dust) = vat.ilks(ilk);
             (uint balance, uint dept) = vat.urns(ilk, MCD_UrnHandler);
-            balance += input;
-            return [dust/rate, balance*spot/rate];
+            uint ethbalance = balance + input;
+            return [dust/rate, ethbalance*spot/rate-dept];
     }
     
     // get Uniswap's exchange rate of ETH/WETH
@@ -232,7 +232,7 @@ contract CallerContract is HelperContract{
      }
 
      // Open CDP, lock some Eth and draw Dai
-     function openLockETHAndDraw(uint drawAmount) public payable onlyMyself NoExistingCDP {   
+     function openLockETHAndDraw(uint input, uint drawAmount) public payable onlyMyself NoExistingCDP {   
          bytes memory payload = abi.encodeWithSignature("openLockETHAndDraw(address,address,address,address,bytes32,uint256)", 
                                     address(dcml), 
                                     MCD_JUG, 
@@ -241,8 +241,9 @@ contract CallerContract is HelperContract{
                                     ilk, 
                                     drawAmount
                                     );
+                                    
        (bool success, ) = proxy.call{
-                value:msg.value
+                value:input
             }(abi.encodeWithSignature(
                 "execute(address,bytes)",
                     DssProxyActions, payload)
@@ -253,7 +254,7 @@ contract CallerContract is HelperContract{
     }
     
     // Lock some Eth and draw Dai
-    function lockETHAndDraw(uint drawAmount) public payable onlyMyself {
+    function lockETHAndDraw(uint input, uint drawAmount) public payable onlyMyself {
         bytes memory payload = abi.encodeWithSignature("lockETHAndDraw(address,address,address,address,uint256,uint256)", 
                                    address(dcml), 
                                    MCD_JUG, 
@@ -262,8 +263,9 @@ contract CallerContract is HelperContract{
                                    cdpi,
                                    drawAmount
                                    );
+                                   
         (bool success, ) = proxy.call{
-                value:msg.value
+                value:input
             }(abi.encodeWithSignature(
                 "execute(address,bytes)",
                 DssProxyActions, payload)
@@ -279,7 +281,7 @@ contract CallerContract is HelperContract{
     }
     
     // Execute Swap from Dai to Weth on Uniswap
-    function  swapDAItoETH(uint value_in, uint value_out) 
+    function swapDAItoETH(uint value_in, uint value_out) 
         public 
         onlyMyself 
         returns (uint[] memory amounts) {
@@ -342,22 +344,21 @@ contract AlphaStage_EthLeverager is CallerContract {
                     exchangeRate <= rate + offset, "Exchange Rate might have changed or offset too small"
                     );
                     
-                    
             uint input = msg.value;
             uint drawAmount = getMinAndMaxDraw(input)[1];
-            uint weth_out = drawAmount/(exchangeRate+offset);
+            uint eth_out = drawAmount/(exchangeRate+offset);
             if (proxy == address(0)) {
                 buildProxy();
             }
             if (cdpi == 0){
-                openLockETHAndDraw(drawAmount);
+                openLockETHAndDraw(input, drawAmount);
             } else {
-                lockETHAndDraw(drawAmount);
+                lockETHAndDraw(input, drawAmount);
             }
-            require(daiBalance()>0, "Problem with lock and draw");
+            require(daiBalance()>0, "SR - Problem with lock and draw");
             approveUNIRouter(drawAmount);
-            require(daiAllowanceApproved() > 0, "Problem with Approval");
-            swapDAItoETH(drawAmount, weth_out);
+            require(daiAllowanceApproved() > 0, "SR - Problem with Approval");
+            swapDAItoETH(drawAmount, eth_out);
     }
     
     
@@ -380,30 +381,45 @@ contract AlphaStage_EthLeverager is CallerContract {
                     );
                     
             // Desired ether amount at the end
-            uint goal = msg.value*(leverage)/100;
+            uint goal = msg.value*leverage/100;
             
             if (proxy == address(0)) {
                 buildProxy();
             }
             
             uint input = msg.value;
-            uint drawAmount = getMinAndMaxDraw(input)[1];
-            
-            while (vaultBalance()[0] < goal && drawAmount > getMinAndMaxDraw(input)[0]) {
+            uint[2] memory draw = getMinAndMaxDraw(input);
+            uint minDraw = draw[0];
+            uint drawAmount = draw[1];
+            uint eth_out = drawAmount/(exchangeRate+offset);
+            uint vault = vaultBalance()[0];
+            while ((vault < goal) && (drawAmount > minDraw)) {
+                require(drawAmount > draw[0], "MR - Min Draw larger than Max Draw");
+                require(drawAmount > 0, "MR - Draw is zero");
+                require(eth_out > 0, "MR - ETH out is zero");
                 if (cdpi == 0){
-                    openLockETHAndDraw(drawAmount);
+                    openLockETHAndDraw(input, drawAmount);
+                    require(daiBalance() > 0, "1MR - Problem with lock and draw");
                 } else {
-                    lockETHAndDraw(drawAmount);
+                    lockETHAndDraw(input, drawAmount);
+                    require(daiBalance() > 0, "2MR - Problem with lock and draw");
                 }
-                require(daiBalance() > 0, "Problem with lock and draw");
+                require(daiBalance() > 0, "3MR - Problem with lock and draw");
                 
                 approveUNIRouter(drawAmount);
-                require(daiAllowanceApproved() > 0, "Problem with Approval");
+                require(daiAllowanceApproved() > 0, "MR - Problem with approval");
                 
-                uint weth_out = input/(exchangeRate+offset);
-                swapDAItoETH(drawAmount, weth_out);
+                swapDAItoETH(drawAmount, eth_out);
+                require(address(this).balance > 0, "MR - Problem with the swap");
+                require(address(this).balance < input, "Input Fail");
                 input = address(this).balance;
-                drawAmount = getMinAndMaxDraw(input)[1];
+                draw = getMinAndMaxDraw(input);
+                minDraw = draw[0];
+                drawAmount = draw[1];
+                require(drawAmount > 0, "2MR - Draw is zero");
+                eth_out = drawAmount/(exchangeRate+offset);
+                vault = vaultBalance()[0];
+                require(vault > 0, "MR - Vault problem");
             }
     }
 }
