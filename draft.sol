@@ -113,6 +113,7 @@ contract HelperContract {
      address MCD_UrnHandler;
      address public proxy;
      uint256 public cdpi;
+     uint8 public loopCount;
      DssCdpManagerLike      dcml =  DssCdpManagerLike(CPD_MANAGER);
      ProxyRegistryLike      prl  =  ProxyRegistryLike(MCD_PROXY_REGISTRY);
      UniswapV2Router02Like  url  =  UniswapV2Router02Like(UNI_Router);
@@ -218,6 +219,16 @@ contract HelperContract {
             (uint coll, uint dept) = vat.urns(ilk, MCD_UrnHandler);
             return [coll, dept];
     }   
+    
+    // This contracts' vault balance incl. collaterals locked
+    function vaultEndBalance() 
+        public 
+        view 
+        onlyMyself 
+        returns (uint){
+            (uint coll, ) = vat.urns(ilk, MCD_UrnHandler);
+            return address(this).balance + coll;
+    } 
 }
 
 // --- CALLER CONTRACT ---
@@ -393,6 +404,7 @@ contract AlphaStage_EthLeverager is CallerContract {
             uint drawAmount = draw[1];
             uint eth_out = drawAmount/(exchangeRate+offset);
             uint vault = vaultBalance()[0];
+            loopCount = 0;
             while ((vault < goal) && (drawAmount > minDraw)) {
                 require(drawAmount > draw[0], "MR - Min Draw larger than Max Draw");
                 require(drawAmount > 0, "MR - Draw is zero");
@@ -420,6 +432,7 @@ contract AlphaStage_EthLeverager is CallerContract {
                 eth_out = drawAmount/(exchangeRate+offset);
                 vault = vaultBalance()[0];
                 require(vault > 0, "MR - Vault problem");
+                loopCount += 1;
             }
     }
 }
