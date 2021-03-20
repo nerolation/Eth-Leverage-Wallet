@@ -334,7 +334,7 @@ contract CallerContract is HelperContract{
 // --- ETH LEVERAGE CONTRACT ---
 // Main Interface to interact with the CallerContract
 // 
-contract AlphaStage_EthLeverager is CallerContract {
+contract AlphaStageEthLeverager is CallerContract {
     
     constructor() payable {
         owner = payable(msg.sender);
