@@ -2,6 +2,11 @@
 Using MakerDao and Uniswap to leverage ether balances with up to a factor of 2.7 within one transaction
 
 ## Usage
+#### Prerequisites: 
+* Ganache-Cli is globally executeble with the command `ganache-cli`
+
+#### Run:
+Make sure to add your RPC HTTP endpoint
 
 ```python
 from DefiLeverageWallet import MyContract
