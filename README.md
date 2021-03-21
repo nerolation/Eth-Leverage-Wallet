@@ -7,7 +7,7 @@ Using MakerDao and Uniswap to leverage ether balances with up to a factor of 2.7
 * RPC HTTP Host (ex. [infura.io](infura.io))
 
 #### Run:
-###### Make sure to add your RPC HTTP endpoint or (optional) create a text file called `infuraurl` into the project's directory which contains the url
+###### Make sure to add your RPC HTTP endpoint or (optional) create a text file called `infuraurl` in the project's directory that holds the url for your RPC connection
 
 ```python
 from DefiLeverageWallet import MyContract
