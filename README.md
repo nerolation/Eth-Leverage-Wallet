@@ -3,10 +3,11 @@ Using MakerDao and Uniswap to leverage ether balances with up to a factor of 2.7
 
 ## Usage
 #### Prerequisites: 
-* Ganache-Cli is globally executeble with the command `ganache-cli`
+* Ganache-Cli is globally executable with the command `ganache-cli`
+* RPC HTTP Host (ex. [infura.io](infura.io))
 
 #### Run:
-Make sure to add your RPC HTTP endpoint
+##### Make sure to add your RPC HTTP endpoint or create a text file called `infuraurl` into the project's directory which contains the url
 
 ```python
 from DefiLeverageWallet import MyContract
