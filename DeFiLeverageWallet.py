@@ -12,10 +12,10 @@ class Helper():
     def initiate_ganache(self, latestBlock=1000000, infura_url = None, kill = False):
         if not infura_url:
             with open('infuraurl', "r") as inf:
-                infuraUrl = inf.read()
+                infura_url = inf.read()
         if kill:
             os.system("pkill -f 'bash -c ganache-cli'")
-        command = "ganache-cli -b 10 --fork {}@{}".format(infuraUrl, latestBlock)
+        command = "ganache-cli -b 10 --fork {}@{}".format(infura_url, latestBlock)
         os.system("gnome-terminal -e 'bash -c \"{}; bash\" '".format(command))
         while (latestBlock == 1000000):
             try:
