@@ -9,24 +9,20 @@ class Helper():
     # Create web3 instance
     # Recursive function used to first get the latest block and then  
     # ...fork the chain latest possible
-    def initiate_ganache(self, latestBlock=1000000, infura_url = None, kill = False):
+    def initiate_ganache(self, latestBlock=1000000, infura_url = None):
         if not infura_url:
             with open('infuraurl', "r") as inf:
-                infura_url = inf.read()
-        if kill:
-            os.system("pkill -f 'bash -c ganache-cli'")
-        command = "ganache-cli -b 10 --fork {}@{}".format(infura_url, latestBlock)
+                infura_url = inf.read().strip()
+        command = "ganache-cli -b 10 --fork {}".format(infura_url)
         os.system("gnome-terminal -e 'bash -c \"{}; bash\" '".format(command))
         while (latestBlock == 1000000):
             try:
                 time.sleep(0.2)
                 w3 = Web3(Web3.HTTPProvider('HTTP://127.0.0.1:8545'))
-                latestBlock = w3.eth.getBlock("latest").number
-                return self.initiate_ganache(latestBlock, kill=True)
+                latestBlock = w3.eth.getBlock("latest").number  
             except:
                 latestBlock=1000000
                 
-        w3 = Web3(Web3.HTTPProvider('HTTP://127.0.0.1:8545'))
         while(not w3.eth.default_account):
             time.sleep(0.2)
             try: w3.eth.default_account = w3.eth.accounts[0]
