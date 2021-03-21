@@ -32,7 +32,7 @@ After a single transaction the accounts ETH balance grew to 128 ETH (118 + 110) 
 50 ETH were leveraged to 128, which results in a laverage-factor of about 2.57x.
 
 The fact that under-collateralized vaults are in risk of liquidations was completely ignored.
-This should definatelly not be used in production environment!
+This should definatelly not be used in production environments!
 
 Visit [toniwahrstaetter.com](https://toniwahrstaetter.com/) for further details!
 <br/><br/><br/>
