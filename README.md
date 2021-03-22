@@ -34,7 +34,7 @@ myContract.action(transaction_value, gasPrice = transaction_gaspr)
 ![image](https://user-images.githubusercontent.com/51536394/111901806-6a3c3900-8a3a-11eb-94eb-2e5af6330be1.png)
 
 In the above test case, 50 ETH were sent in to the LeverageWallet
-After a single transaction the accounts ETH balance grew to 128 ETH (118 + 110) with an outstanding DAI dept of 141,160 DAI.
+After a single transaction the accounts ETH balance grew to 128 ETH (118 + 10) with an outstanding DAI dept of 141,160 DAI.
 50 ETH were leveraged to 128, which results in a laverage-factor of about 2.57x.
 
 The fact that under-collateralized vaults are in risk of liquidations was completely ignored.
