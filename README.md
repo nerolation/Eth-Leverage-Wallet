@@ -1,5 +1,5 @@
 # Ethereum wallet with MakerDao and Uniswap integration
-Using MakerDao and Uniswap to leverage ether balances with a factor of up to 2.7 within a single transaction
+Using MakerDao and Uniswap to leverage ether balances by a factor of up to 2.7 within a single transaction
 
 ## Usage
 #### Prerequisites: 
