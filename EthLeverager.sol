@@ -161,7 +161,7 @@ contract HelperContract {
             return [dust/rate, ethbalance*spot/rate-dept];
     }
     
-    // get Uniswap's exchange rate of ETH/WETH
+    // get Uniswap's exchange rate of DAI/WETH
     function getExchangeRate() 
         public 
         view 
@@ -334,7 +334,7 @@ contract CallerContract is HelperContract{
 // --- ETH LEVERAGE CONTRACT ---
 // Main Interface to interact with the CallerContract
 // 
-contract AlphaStageEthLeverager is CallerContract {
+contract EthLeverager is CallerContract {
     
     constructor() payable {
         owner = payable(msg.sender);
