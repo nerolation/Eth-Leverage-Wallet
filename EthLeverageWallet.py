@@ -34,9 +34,9 @@ class Helper():
         return w3, latestBlock
     
     def initialize(self, w3):
-        with open("contract/abi.txt") as abiFile:
+        with open("build/abi.txt") as abiFile:
             abi = re.sub("\n|\t|\ ", "", abiFile.read())
-        with open("contract/bytecode.txt") as abiFile:
+        with open("build/bytecode.txt") as abiFile:
             bytecode = abiFile.read().strip()
         return w3.eth.contract(bytecode = bytecode, abi=abi)
     
