@@ -1,4 +1,4 @@
-from EthLeverageWallet import MyContract
+from src.EthLeverageWallet import MyContract
 from web3 import Web3
 
 http_rpc = None # https://mainnet.infura.io/v3/...
