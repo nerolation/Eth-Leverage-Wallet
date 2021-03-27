@@ -7,8 +7,8 @@ http_rpc = None  # https://mainnet.infura.io/v3/...
 i_EthLW = EthLeverage().init(http_rpc)
 i_EthLW.buildContract()
 
-value = 50  # 50  Ether
-gasPrice = 100  # 100 Gwei
+value = 50        # 50  Ether
+gasPrice = 100    # 100 Gwei
 maxGas = 3000000  # 3   Mio.
 
 transaction_value = i_EthLW.w3.toWei(value, "ether")
