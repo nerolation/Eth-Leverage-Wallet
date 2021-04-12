@@ -31,7 +31,7 @@ i_EthLW.action(transaction_value, gasPrice=transaction_gaspr)
 ```
 ## Mainnet-fork test results:
 
-![image](static/111901806-6a3c3900-8a3a-11eb-94eb-2e5af6330be1.png)
+![image](static/test.png)
 
 In the above test case, 50 ETH were sent in to the LeverageWallet.
 After a single transaction the accounts ETH balance grew to 128 ETH (118 + 10) with an outstanding DAI debt of 141,160 DAI.
